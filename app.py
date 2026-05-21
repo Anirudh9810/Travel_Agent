@@ -2,12 +2,15 @@ import os
 import asyncio
 import streamlit as st
 import json
+import re
+from io import BytesIO
+from fpdf import FPDF
 from travel_agent import TravelAgent
 from mcp_server import list_saved_plans, load_tour_plan
 
 # Set page configuration with a premium title and layout
 st.set_page_config(
-    page_title="Vagabond AI — Premium Agentic Tour Planner",
+    page_title="Voyager AI — Premium Agentic Tour Planner",
     page_icon="✈️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -120,6 +123,59 @@ footer {visibility: hidden;}
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
+_ARIAL_UNICODE = "/Library/Fonts/Arial Unicode.ttf"
+
+def generate_pdf(title: str, markdown_text: str) -> bytes:
+    """Convert markdown itinerary text to a PDF and return as bytes."""
+    pdf = FPDF()
+    pdf.set_margins(15, 15, 15)
+    pdf.add_font("ArialUnicode", style="", fname=_ARIAL_UNICODE, uni=True)
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    w = pdf.w - pdf.l_margin - pdf.r_margin
+
+    pdf.set_font("ArialUnicode", size=20)
+    pdf.set_text_color(80, 60, 200)
+    pdf.multi_cell(w, 10, title, align="C")
+    pdf.ln(6)
+
+    pdf.set_font("ArialUnicode", size=11)
+    pdf.set_text_color(30, 30, 30)
+
+    for line in markdown_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("### "):
+            pdf.set_font("ArialUnicode", size=13)
+            pdf.set_text_color(80, 60, 200)
+            pdf.ln(4)
+            pdf.multi_cell(w, 7, stripped[4:])
+            pdf.set_font("ArialUnicode", size=11)
+            pdf.set_text_color(30, 30, 30)
+        elif stripped.startswith("## "):
+            pdf.set_font("ArialUnicode", size=15)
+            pdf.set_text_color(60, 40, 180)
+            pdf.ln(5)
+            pdf.multi_cell(w, 8, stripped[3:])
+            pdf.set_font("ArialUnicode", size=11)
+            pdf.set_text_color(30, 30, 30)
+        elif stripped.startswith("# "):
+            pdf.set_font("ArialUnicode", size=17)
+            pdf.set_text_color(50, 30, 160)
+            pdf.ln(6)
+            pdf.multi_cell(w, 9, stripped[2:])
+            pdf.set_font("ArialUnicode", size=11)
+            pdf.set_text_color(30, 30, 30)
+        elif stripped == "":
+            pdf.ln(3)
+        else:
+            clean = re.sub(r'\*\*(.+?)\*\*', r'\1', stripped)
+            clean = re.sub(r'\*(.+?)\*', r'\1', clean)
+            clean = re.sub(r'\[(.+?)\]\(.+?\)', r'\1', clean)
+            pdf.multi_cell(w, 6, clean)
+
+    return bytes(pdf.output())
+
+
 # Helper function to run the async agent
 async def run_planner(agent: TravelAgent, query: str, history=None):
     progress_log = []
@@ -153,11 +209,8 @@ async def run_planner(agent: TravelAgent, query: str, history=None):
                 progress_log.append(f"❌ Error in tool '{event['tool_name']}': {event['error']}")
             elif e_type == "agent_success":
                 progress_log.append("🎉 Itinerary planning completed successfully!")
-                
-                # Render the final text response
-                with output_placeholder.container():
-                    st.markdown("### 🗺️ Generated Travel Itinerary")
-                    st.markdown(event["response"])
+                st.session_state["last_itinerary"] = event["response"]
+                st.session_state["last_itinerary_title"] = destination or origin
             elif e_type == "error":
                 progress_log.append(f"⚠️ Agent error: {event['message']}")
                 st.error(event['message'])
@@ -173,7 +226,7 @@ async def run_planner(agent: TravelAgent, query: str, history=None):
             await asyncio.sleep(0.05)
 
 # Render main header
-st.markdown("<div class='gradient-title'>Vagabond AI</div>", unsafe_allow_html=True)
+st.markdown("<div class='gradient-title'>Voyager AI</div>", unsafe_allow_html=True)
 st.markdown("<div class='gradient-subtitle'>Your Premium Agentic Tour Planner powered by LLM Gateway V2</div>", unsafe_allow_html=True)
 
 # ----------------- SIDEBAR -----------------
@@ -209,7 +262,7 @@ if saved_plans_list:
             except Exception as e:
                 st.sidebar.error(f"Error loading plan: {e}")
 else:
-    st.sidebar.info("No saved plans found. Build a plan to save it automatically!")
+    st.sidebar.info("No saved plans found.")
 
 # ----------------- MAIN LAYOUT -----------------
 tab1, tab2 = st.tabs(["✨ Plan New Adventure", "📖 View Loaded Plan"])
@@ -253,7 +306,7 @@ with tab1:
     if custom_pref.strip():
         query_parts.append(f"Additional Preferences: {custom_pref.strip()}.")
         
-    query_parts.append("Provide details on weather, average temperatures, best time to visit, major attractions, and things to do. Finally, save this plan under a descriptive name.")
+    query_parts.append("Provide details on weather, average temperatures, best time to visit, major attractions, and things to do.")
     
     full_query = " ".join(query_parts)
     
@@ -262,11 +315,23 @@ with tab1:
     plan_button = st.button("🚀 Plan My Adventure")
     
     if plan_button:
-        # Instantiate Agent
+        st.session_state.pop("last_itinerary", None)
         agent = TravelAgent(provider=forced_provider)
-        
-        # Run agent loop asynchronously
         asyncio.run(run_planner(agent, full_query))
+
+    if "last_itinerary" in st.session_state:
+        st.markdown("### 🗺️ Generated Travel Itinerary")
+        st.markdown(st.session_state["last_itinerary"])
+        st.markdown("---")
+        pdf_title = f"Voyager AI — {st.session_state.get('last_itinerary_title', 'Travel Plan')}"
+        pdf_bytes = generate_pdf(pdf_title, st.session_state["last_itinerary"])
+        safe_filename = "".join(c for c in st.session_state.get("last_itinerary_title", "travel_plan") if c.isalnum() or c in (" ", "-", "_")).strip().replace(" ", "_")
+        st.download_button(
+            label="💾 Save Itinerary as PDF",
+            data=pdf_bytes,
+            file_name=f"{safe_filename}_itinerary.pdf",
+            mime="application/pdf",
+        )
 
 with tab2:
     if "loaded_plan" in st.session_state:
