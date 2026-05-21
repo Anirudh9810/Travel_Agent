@@ -56,12 +56,13 @@ class TravelAgent:
                     messages.append({"role": "user", "content": user_query})
 
                     loop_count = 0
-                    max_loops = 10
-                    
+                    max_loops = 20
+
                     # Define system prompt
                     system_prompt = (
                         "You are an expert Tour Planner AI Agent. Your objective is to assist users in planning trips. "
                         "You have access to a travel toolset to find information. "
+                        "IMPORTANT: Always call multiple tools in a single response when possible — batch web_search, get_weather, and get_travel_advice together rather than one at a time. "
                         "When planning a tour, construct a detailed daily itinerary. Include weather updates for the destination if appropriate. "
                         "Present the final itinerary in a beautiful, structured format. "
                         "Be sure to save the plan using the save_tour_plan tool if the user indicates they want to save it, "

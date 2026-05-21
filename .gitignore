@@ -8,3 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+.env
+
+# all other files and folders
+llm_gateway/
+llm_gatewayV2/
+saved_plans/
+/project_setup.md
