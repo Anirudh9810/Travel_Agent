@@ -432,3 +432,10 @@ SAVE RULE: Do NOT call save_tour_plan automatically — only save if the user ex
   "overall_clarity": "Exceptional prompt. It comprehensively addresses every single criterion. The inclusion of a explicit two-phase approach for tool use, specialized internal reasoning tags, a strict self-verification checklist, and robust tool-failure fallbacks makes this an incredibly robust system prompt for structured reasoning."
 }
 
+---
+
+## Youtube Video link
+
+https://youtu.be/vFSuou1XsVc
+
+---
